@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HPC Simulation Lab: Atmospheric PM2.5 & Parallel Benchmark</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Header & Telemetry -->
+    <header class="header-container">
+        <div>
+            <div class="brand-badge">⚡ High Performance Computing Lab</div>
+            <h1 class="title-gradient">Atmospheric PM2.5 Simulation & Multi-Core Benchmark</h1>
+            <p class="subtitle">Studi Kasus Kuliah Tamu: Dr. Worawan Diaz Carballo (Thammasat University) — Global Infrastructure to Address Local Challenges</p>
+        </div>
+        <div class="telemetry-pill">
+            <div>Hardware Concurrency: <strong id="hostCpuCores">8 Cores</strong></div>
+            <div>Cluster Mode: <strong>Domain-Decomposition</strong></div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav">
+        <button class="tab-btn active" data-target="tabSimulation">1. Live Fluid-Particle Dispersion (Kasus LANTA)</button>
+        <button class="tab-btn" data-target="tabBenchmark">2. Multi-Core Scaling & Hukum Amdahl</button>
+        <button class="tab-btn" data-target="tabIntegrator">3. Konsep "The Integrator" & Skala FLOPS</button>
+    </nav>
+
+    <!-- TAB 1: AIR QUALITY PM2.5 SIMULATION -->
+    <main id="tabSimulation" class="tab-pane">
+        <div class="dashboard-grid">
+            <!-- Left: Interactive Controls -->
+            <aside class="glass-panel">
+                <div class="panel-header">
+                    <div class="panel-title">⚙️ Parameter Fisika Atmosfer</div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Arah Embusan Angin</span>
+                        <span id="valWindAngle" class="val-badge">45°</span>
+                    </div>
+                    <input type="range" id="rangeWindAngle" min="0" max="360" value="45" step="5">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Kecepatan Angin</span>
+                        <span id="valWindSpeed" class="val-badge">20 km/h</span>
+                    </div>
+                    <input type="range" id="rangeWindSpeed" min="5" max="60" value="20" step="1">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Koefisien Dispersi Turbulensi</span>
+                        <span id="valDiffusion" class="val-badge">0.55</span>
+                    </div>
+                    <input type="range" id="rangeDiffusion" min="0.1" max="1.0" value="0.55" step="0.05">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Resolusi Grid Komputasi</span>
+                        <span id="valGridSize" class="val-badge">200x200</span>
+                    </div>
+                    <input type="range" id="rangeGridSize" min="100" max="400" value="200" step="50">
+                </div>
+
+                <button id="btnRunSim" class="btn-primary">
+                    🚀 Jalankan Komputasi Simulasi
+                </button>
+
+                <!-- Policy Decision Card -->
+                <div class="policy-card">
+                    <span id="policyBadge" class="policy-badge">STATUS: BERBAHAYA (HAZARDOUS)</span>
+                    <h4 style="font-size: 0.95rem; margin-bottom: 8px;">🎯 Tindakan Mitigasi Publik:</h4>
+                    <ul id="policyList" class="policy-list">
+                        <li>🚨 Instruksikan penutupan sekolah & WFH untuk membatasi paparan publik.</li>
+                        <li>🏭 Wajibkan pengurangan kapasitas produksi kawasan industri sebesar 50%.</li>
+                        <li>😷 Distribusikan masker N95 kepada kelompok rentan (anak-anak & lansia).</li>
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- Right: Visual Simulation & KPI -->
+            <section class="glass-panel">
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-card-title">Latency Komputasi</div>
+                        <div id="kpiLatency" class="kpi-card-value">12.4 ms</div>
+                        <div class="kpi-card-sub">Waktu respons multi-core</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-card-title">Throughput Mesin</div>
+                        <div id="kpiThroughput" class="kpi-card-value">3.85 GFLOPS</div>
+                        <div class="kpi-card-sub">Floating-point per detik</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-card-title">Percepatan (Speedup)</div>
+                        <div id="kpiSpeedup" class="kpi-card-value">3.45x</div>
+                        <div class="kpi-card-sub">vs Serial 1 Core</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-card-title">Puncak PM2.5</div>
+                        <div id="kpiPm25" class="kpi-card-value">185.4 µg/m³</div>
+                        <div class="kpi-card-sub">Kategori Sangat Tinggi</div>
+                    </div>
+                </div>
+
+                <!-- HTML5 Canvas Particle Simulation -->
+                <div class="canvas-wrapper">
+                    <canvas id="simCanvas"></canvas>
+                    <div class="canvas-overlay-legend">
+                        <span>Indeks Konsentrasi PM2.5</span>
+                        <div class="legend-scale">
+                            <span>Aman</span>
+                            <div class="gradient-bar"></div>
+                            <span>Ekstrem</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- TAB 2: MULTI-CORE SCALING BENCHMARK -->
+    <main id="tabBenchmark" class="tab-pane" style="display: none;">
+        <div class="glass-panel">
+            <div class="panel-header">
+                <div>
+                    <h2 class="title-gradient" style="font-size: 1.5rem;">Benchmark Komputasi Paralel & Hukum Amdahl</h2>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Analisis batas percepatan teoritis ketika sebagian kode bersifat serial ($P = 92\%$).</p>
+                </div>
+                <button id="btnRunStress" class="btn-primary" style="width: auto; padding: 10px 20px;">
+                    🔥 Re-run Multi-Core Stress Test
+                </button>
+            </div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Alokasi Core</th>
+                        <th>Waktu Eksekusi</th>
+                        <th>Speedup Aktual</th>
+                        <th>Speedup Amdahl</th>
+                        <th>Efisiensi Paralel</th>
+                        <th>Throughput Komputasi</th>
+                    </tr>
+                </thead>
+                <tbody id="benchmarkTableBody">
+                    <!-- Populated dynamically via app.js -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- TAB 3: THE INTEGRATOR & KNOWLEDGE BASE -->
+    <main id="tabIntegrator" class="tab-pane" style="display: none;">
+        <div class="dashboard-grid">
+            <div class="glass-panel">
+                <h3 style="color: var(--primary); margin-bottom: 12px;">🌐 Peran Krusial "The Integrator"</h3>
+                <p style="color: #cbd5e1; font-size: 0.92rem; line-height: 1.7;">
+                    Narasumber <strong>Dr. Worawan Diaz Carballo</strong> menekankan bahwa superkomputer berkecepatan PetaFLOPS/ExaFLOPS tidak akan memberikan manfaat nyata bila tidak ada tenaga ahli yang mampu menjembataninya dengan persoalan lokal.
+                </p>
+                <div style="background: rgba(15, 23, 42, 0.7); border-left: 3px solid var(--secondary); padding: 14px; border-radius: 8px; margin: 16px 0; font-family: var(--font-mono); font-size: 0.85rem; color: #e2e8f0;">
+                    Solusi Nyata = Domain Problem + Computational Logic + HPC Infrastructure
+                </div>
+                <p style="color: #94a3b8; font-size: 0.9rem;">
+                    Mahasiswa Informatika memiliki posisi strategis untuk menguasai Linux, MPI/OpenMP, Python/Pandas, GPU Acceleration, dan data science untuk memecahkan isu banjir, polusi udara, hingga penanganan wabah.
+                </p>
+            </div>
+
+            <div class="glass-panel">
+                <h3 style="color: var(--secondary); margin-bottom: 12px;">📈 Skala Daya Komputasi (FLOPS Hierarchy)</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Tingkatan</th>
+                            <th>Orde</th>
+                            <th>Contoh Nyata</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>kiloFLOPS</td><td>10³</td><td>Kalkulator & chip mikrokontroler</td></tr>
+                        <tr><td>megaFLOPS</td><td>10⁶</td><td>Komputer era awal 80-an</td></tr>
+                        <tr><td>gigaFLOPS</td><td>10⁹</td><td>Laptop & Smartphone modern saat ini</td></tr>
+                        <tr><td>teraFLOPS</td><td>10¹²</td><td>GPU Gaming & AI Workstation</td></tr>
+                        <tr><td style="color: #38bdf8; font-weight: 700;">petaFLOPS</td><td>10¹⁵</td><td>Superkomputer LANTA (Thailand)</td></tr>
+                        <tr><td style="color: #f43f5e; font-weight: 700;">exaFLOPS</td><td>10¹⁸</td><td>Superkomputer Frontier & El Capitan</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom JavaScript Engine -->
+    <script src="app.js"></script>
+</body>
+</html>
